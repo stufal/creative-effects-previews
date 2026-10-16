@@ -12,6 +12,68 @@
 <!doctype html>
 <html lang="en">
 <head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  const RATE = 0.5, hoverMode = q.get('preview') === 'hover'
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 16000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Image Trail</title>
@@ -52,33 +114,5 @@
     ], { duration: 1100, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
   });
 </script>
-<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
-<script>(() => {
-  if (!new URLSearchParams(location.search).has('preview')) return
-  document.documentElement.classList.add('fx-preview')
-  let real = false; const stop = e => { if (e.isTrusted) real = true }
-  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
-  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
-  let y = 0, dir = 1, t = 0, last = null
-  function tick() {
-    t += 1 / 60
-    if (!real) {
-      const max = document.documentElement.scrollHeight - innerHeight
-      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
-      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
-      const el = document.elementFromPoint(x, py)
-      if (el !== last) {
-        const a = chain(last), b = chain(el)
-        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
-        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
-        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
-        last = el
-      }
-      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
-    }
-    requestAnimationFrame(tick)
-  }
-  setTimeout(tick, 400)
-})()</script>
 </body>
 </html>
