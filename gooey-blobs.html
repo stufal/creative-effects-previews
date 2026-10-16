@@ -1,0 +1,82 @@
+<!--
+@name Gooey Metaballs
+@category Material & Transition
+@tags gooey, metaballs, svg filter, liquid, blob, cursor, merge
+@deps none
+@support Evergreen browsers
+@description A chain of blobs follows the cursor and melts together like liquid mercury when they touch, thanks to an SVG blur + alpha-contrast filter. Also great for gooey menus and buttons.
+@usage Wrap shapes in a container with filter: url(#goo). Increase stdDeviation for softer merging; the matrix row "18 -7" sets edge sharpness.
+@source Classic "gooey effect" (Lucas Bebber), modernised
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gooey Metaballs</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #0a0a0f; font-family: system-ui, sans-serif; }
+  .label { position: absolute; inset: auto 0 24px; text-align: center; color: #fff; opacity: .45; font-size: 13px; letter-spacing: .2em; text-transform: uppercase; }
+
+  /* === EFFECT === */
+  .goo { position: fixed; inset: 0; filter: url(#goo); }
+  .blob { position: absolute; left: 0; top: 0; border-radius: 50%; background: linear-gradient(135deg, #ff5ca8, #7c5cff); will-change: transform; }
+  .anchor { position: absolute; left: calc(50% - 70px); top: calc(50% - 70px); width: 140px; height: 140px; border-radius: 50%; background: #7c5cff; animation: breathe 4s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.15) translateY(-10px); } }
+  @media (prefers-reduced-motion: reduce) { .anchor { animation: none; } }
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="12" result="b"/>
+      <feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7"/></filter>
+  </svg>
+  <div class="goo" aria-hidden="true"><div class="anchor"></div></div>
+  <div class="label">Move your cursor into the blob</div>
+<script>
+  const COUNT = 10, goo = document.querySelector('.goo');
+  const blobs = Array.from({ length: COUNT }, (_, i) => {
+    const el = document.createElement('div'), s = 70 - i * 5;
+    el.className = 'blob'; el.style.width = el.style.height = `${s}px`; el.style.margin = `${-s / 2}px 0 0 ${-s / 2}px`;
+    goo.append(el); return { el, x: innerWidth / 2, y: innerHeight / 2 };
+  });
+  let mx = innerWidth / 2, my = innerHeight / 2;
+  addEventListener('pointermove', e => { mx = e.clientX; my = e.clientY; });
+  (function loop() {
+    let x = mx, y = my;
+    blobs.forEach(b => { b.x += (x - b.x) * .3; b.y += (y - b.y) * .3; b.el.style.transform = `translate(${b.x}px,${b.y}px)`; x = b.x; y = b.y; });
+    requestAnimationFrame(loop);
+  })();
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

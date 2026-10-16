@@ -1,0 +1,84 @@
+<!--
+@name Image Trail
+@category Cursor & Hover
+@tags cursor, trail, images, web animations api, playful, portfolio hero
+@deps none
+@support Evergreen browsers
+@description Moving the pointer leaves a trail of images that pop in, then shrink and fall away — a playful hero interaction seen on many award-winning portfolios.
+@usage Put <img> (or styled divs) inside .trail as the pool; they are recycled round-robin. GAP = distance in px between spawns.
+@source Codrops "Image Trail Effects" pattern
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image Trail</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #efece6; font-family: system-ui, sans-serif; display: grid; place-items: center; }
+  h1 { position: relative; z-index: 1; margin: 0; font-size: clamp(36px, 9vw, 100px); letter-spacing: -.05em; mix-blend-mode: difference; color: #fff; pointer-events: none; }
+
+  /* === EFFECT === */
+  .trail { position: fixed; inset: 0; pointer-events: none; }
+  .trail > * {
+    position: absolute; left: 0; top: 0; width: 150px; aspect-ratio: 4/5; margin: -94px 0 0 -75px;
+    border-radius: 10px; object-fit: cover; opacity: 0; will-change: transform, opacity;
+  }
+  /* placeholder "images" – replace with <img src> */
+  .trail > div { background: linear-gradient(160deg, hsl(var(--h) 85% 62%), hsl(calc(var(--h) + 60) 80% 40%)); }
+</style>
+</head>
+<body>
+  <div class="trail" aria-hidden="true"></div>
+  <h1>Move your mouse</h1>
+<script>
+  const GAP = 80, POOL = 12;
+  const trail = document.querySelector('.trail');
+  if (!trail.children.length) for (let i = 0; i < POOL; i++) { const d = document.createElement('div'); d.style.setProperty('--h', i * 30); trail.append(d); }
+  const items = [...trail.children];
+  let i = 0, last = null;
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) addEventListener('pointermove', e => {
+    if (last && Math.hypot(e.clientX - last.x, e.clientY - last.y) < GAP) return;
+    const from = last || { x: e.clientX, y: e.clientY }; last = { x: e.clientX, y: e.clientY };
+    const el = items[i++ % items.length], rot = (Math.random() - .5) * 20;
+    el.style.zIndex = i;
+    el.animate([
+      { opacity: 1, transform: `translate(${from.x}px,${from.y}px) scale(.6) rotate(${rot}deg)` },
+      { opacity: 1, transform: `translate(${e.clientX}px,${e.clientY}px) scale(1) rotate(${rot}deg)`, offset: .25 },
+      { opacity: 1, transform: `translate(${e.clientX}px,${e.clientY}px) scale(1) rotate(${rot}deg)`, offset: .6 },
+      { opacity: 0, transform: `translate(${e.clientX}px,${e.clientY + 60}px) scale(.3) rotate(${rot * 2}deg)` }
+    ], { duration: 1100, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+  });
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

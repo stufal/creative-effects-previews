@@ -1,0 +1,133 @@
+<!--
+@name Thinking Orbs
+@category AI Interface
+@tags ai, loading, thinking indicator, canvas, 3d dots, sphere, torus, particles, agent status
+@deps none (Canvas 2D)
+@support Evergreen browsers
+@description Tiny 3D particle orbs that signal an AI at work — a breathing dotted sphere, a rolling torus, a swirling galaxy and a listening wave — each paired with a shimmering status label.
+@usage new ThinkingOrb(canvas, { variant: 'sphere' | 'torus' | 'galaxy' | 'listen', color: '#fff', speed: 1 }). Canvas CSS size sets the orb size (24–96px works best). Call orb.setVariant() to switch state, orb.destroy() to stop.
+@source Concept from libraries.dev "Thinking orbs", recreated from scratch
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thinking Orbs</title>
+<style>
+  html { height: 100%; } body { margin: 0; min-height: 100%; }
+  body { background: #0b0b0e; color: #e9e9ef; font-family: system-ui, sans-serif; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; width: min(760px, 100%); }
+  .tile { display: flex; align-items: center; justify-content: center; gap: 10px; height: 120px; border-radius: 16px; background: #131318; border: 1px solid rgb(255 255 255 / .06); }
+  .big { grid-column: 1 / -1; height: 200px; flex-direction: column; gap: 14px; }
+
+  /* === EFFECT === */
+  .orb { width: 34px; height: 34px; display: block; }
+  .big .orb { width: 96px; height: 96px; }
+  .orb-label {
+    font-size: 14px; font-weight: 500;
+    background: linear-gradient(110deg, #77778a 35%, #fff 50%, #77778a 65%) 0 0 / 250% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: orb-shine 2.2s cubic-bezier(.6,0,.4,1) infinite;
+  }
+  @keyframes orb-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  @media (prefers-reduced-motion: reduce) { .orb-label { animation: none; color: #aaa; } }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="tile big"><canvas class="orb" data-variant="sphere" data-color="#a78bfa"></canvas><span class="orb-label" id="big-label">Thinking…</span></div>
+    <div class="tile"><canvas class="orb" data-variant="sphere"></canvas><span class="orb-label">Solving…</span></div>
+    <div class="tile"><canvas class="orb" data-variant="torus"></canvas><span class="orb-label">Thinking…</span></div>
+    <div class="tile"><canvas class="orb" data-variant="galaxy" data-color="#7dd3fc"></canvas><span class="orb-label">Searching…</span></div>
+    <div class="tile"><canvas class="orb" data-variant="listen" data-color="#86efac"></canvas><span class="orb-label">Listening…</span></div>
+  </div>
+<script>
+  class ThinkingOrb {
+    constructor(canvas, { variant = 'sphere', color = '#ffffff', speed = 1 } = {}) {
+      Object.assign(this, { canvas, color, speed, ctx: canvas.getContext('2d') });
+      this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.setVariant(variant);
+      this.resize = () => {
+        const d = Math.min(devicePixelRatio, 2), r = canvas.getBoundingClientRect();
+        canvas.width = r.width * d; canvas.height = r.height * d;
+      };
+      this.resize(); addEventListener('resize', this.resize);
+      this.t0 = performance.now(); this.loop = this.loop.bind(this); this.raf = requestAnimationFrame(this.loop);
+    }
+    setVariant(v) {
+      this.variant = v; const P = [];
+      if (v === 'sphere' || v === 'listen') {           // Fibonacci sphere
+        const n = v === 'sphere' ? 220 : 160, ga = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < n; i++) { const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y); P.push([Math.cos(ga * i) * r, y, Math.sin(ga * i) * r]); }
+      } else if (v === 'torus') {
+        for (let u = 0; u < 44; u++) for (let w = 0; w < 9; w++) {
+          const a = u / 44 * 6.283, b = w / 9 * 6.283, R = .68, r = .27;
+          P.push([(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]);
+        }
+      } else if (v === 'galaxy') {
+        for (let i = 0; i < 200; i++) { const arm = i % 3, d = Math.sqrt(Math.random()), a = arm * 2.094 + d * 3.2 + (Math.random() - .5) * .5;
+          P.push([Math.cos(a) * d, (Math.random() - .5) * .12, Math.sin(a) * d, d]); }
+      }
+      this.points = P;
+    }
+    loop(now) {
+      const { ctx, canvas: c } = this, W = c.width, H = c.height, t = this.reduce ? 1.5 : (now - this.t0) / 1000 * this.speed;
+      ctx.clearRect(0, 0, W, H); ctx.fillStyle = this.color;
+      const S = Math.min(W, H) * .42, cx = W / 2, cy = H / 2, dot = Math.max(.6, Math.min(W, H) / 70);
+      const ry = t * .9, rx = this.variant === 'galaxy' ? 1.05 : .45 + Math.sin(t * .5) * .15;
+      const cY = Math.cos(ry), sY = Math.sin(ry), cX = Math.cos(rx), sX = Math.sin(rx);
+      for (const p of this.points) {
+        let [x, y, z] = p, k = 1;
+        if (this.variant === 'sphere') k = 1 + .07 * Math.sin(y * 5 + t * 3) * Math.sin(x * 4 - t * 2);     // breathing surface
+        if (this.variant === 'listen') k = 1 + .22 * Math.max(0, Math.sin(y * 6 - t * 7)) * (.5 + .5 * Math.sin(t * 2.3)); // voice ripples
+        if (this.variant === 'galaxy') { const a = t * (1.6 - p[3]); const ca = Math.cos(a), sa = Math.sin(a); [x, z] = [x * ca - z * sa, x * sa + z * ca]; }
+        x *= k; y *= k; z *= k;
+        let X = x * cY - z * sY, Z = x * sY + z * cY;           // rotate Y
+        let Y = y * cX - Z * sX; Z = y * sX + Z * cX;           // rotate X
+        const depth = (Z + 1.3) / 2.6;                           // 0 back … 1 front
+        ctx.globalAlpha = .15 + depth * .85;
+        ctx.beginPath(); ctx.arc(cx + X * S, cy + Y * S, dot * (.45 + depth * .75), 0, 6.283); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if (!this.reduce) this.raf = requestAnimationFrame(this.loop);
+    }
+    destroy() { cancelAnimationFrame(this.raf); removeEventListener('resize', this.resize); }
+  }
+
+  const orbs = [...document.querySelectorAll('.orb')].map(c => new ThinkingOrb(c, { variant: c.dataset.variant, color: c.dataset.color || '#ffffff' }));
+  // Demo: the big orb cycles through states
+  const states = [['sphere', 'Thinking…'], ['torus', 'Reasoning…'], ['galaxy', 'Searching the web…'], ['listen', 'Listening…']];
+  let s = 0; setInterval(() => { s = (s + 1) % states.length; orbs[0].setVariant(states[s][0]); document.getElementById('big-label').textContent = states[s][1]; }, 3200);
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

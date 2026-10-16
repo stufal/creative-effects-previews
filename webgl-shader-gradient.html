@@ -1,0 +1,110 @@
+<!--
+@name WebGL Flowing Shader Gradient
+@category Background
+@tags webgl, glsl, shader, fbm, domain warping, stripe-style, fluid, hero
+@deps none (raw WebGL 1)
+@support All browsers with WebGL; falls back to a CSS gradient
+@description A full-bleed fragment shader paints a slowly flowing, silky gradient using domain-warped noise, subtly bending toward the pointer. Built-in grain prevents banding. The Stripe / "shader hero" look with zero libraries.
+@usage Place <canvas class="shader-bg"> behind content. Edit the 4 palette vec3s in the shader and SPEED. Renders at reduced resolution (SCALE) for performance.
+@source original (technique: Inigo Quilez domain warping)
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WebGL Flowing Shader Gradient</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { color: #fff; font-family: system-ui, sans-serif; display: grid; place-content: center; text-align: center; }
+  h1 { position: relative; margin: 0; font-size: clamp(40px, 9vw, 100px); letter-spacing: -.05em; line-height: .95; mix-blend-mode: overlay; }
+
+  /* === EFFECT === */
+  .shader-bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; background: linear-gradient(135deg, #1a0d40, #e8508c, #3a9bff); }
+</style>
+</head>
+<body>
+  <canvas class="shader-bg" aria-hidden="true"></canvas>
+  <h1>Fluid<br>by default</h1>
+<script>
+  const SPEED = 1, SCALE = .5;
+  const canvas = document.querySelector('.shader-bg');
+  const gl = canvas.getContext('webgl', { antialias: false, premultipliedAlpha: false });
+  if (gl) {
+    const vs = `attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
+    const fs = `precision highp float;
+      uniform vec2 r; uniform float t; uniform vec2 m;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p), u = f*f*(3.-2.*f);
+        return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+      float fbm(vec2 p){ float v = 0., a = .5; for (int i = 0; i < 5; i++){ v += a*n(p); p = p*2.02 + 3.1; a *= .5; } return v; }
+      void main(){
+        vec2 uv = gl_FragCoord.xy / r, p = uv * vec2(r.x/r.y, 1.) * 1.6;
+        float tt = t * .06;
+        vec2 q = vec2(fbm(p + tt), fbm(p + vec2(5.2, 1.3) - tt));
+        vec2 w = vec2(fbm(p + 3.5*q + vec2(1.7, 9.2) + tt*1.4 + (m - .5) * .8), fbm(p + 3.5*q + vec2(8.3, 2.8) - tt));
+        float f = fbm(p + 3.5*w);
+        vec3 c1 = vec3(.07, .04, .22), c2 = vec3(.91, .31, .55), c3 = vec3(1., .74, .42), c4 = vec3(.23, .6, 1.);
+        vec3 col = mix(c1, c2, smoothstep(.2, .85, f));
+        col = mix(col, c4, smoothstep(.3, 1., length(q)) * .7);
+        col = mix(col, c3, smoothstep(.55, 1., w.x) * .6);
+        col += (h(gl_FragCoord.xy + fract(t)) - .5) * .035;
+        gl_FragColor = vec4(col, 1.);
+      }`;
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(prog); gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const uR = gl.getUniformLocation(prog, 'r'), uT = gl.getUniformLocation(prog, 't'), uM = gl.getUniformLocation(prog, 'm');
+    let mx = .5, my = .5, sx = .5, sy = .5;
+    addEventListener('pointermove', e => { mx = e.clientX / innerWidth; my = 1 - e.clientY / innerHeight; });
+    const resize = () => {
+      const d = Math.min(devicePixelRatio, 2) * SCALE;
+      canvas.width = innerWidth * d; canvas.height = innerHeight * d;
+      gl.viewport(0, 0, canvas.width, canvas.height); gl.uniform2f(uR, canvas.width, canvas.height);
+    };
+    addEventListener('resize', resize); resize();
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches, t0 = performance.now();
+    (function frame(now) {
+      sx += (mx - sx) * .04; sy += (my - sy) * .04;
+      gl.uniform1f(uT, reduce ? 20 : (now - t0) / 1000 * SPEED); gl.uniform2f(uM, sx, sy);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!reduce) requestAnimationFrame(frame);
+    })(t0);
+  }
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

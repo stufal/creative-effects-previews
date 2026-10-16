@@ -1,0 +1,124 @@
+<!--
+@name Gooey Menu & Tabs
+@category Material & Transition
+@tags gooey, svg filter, liquid ui, fab, floating action button, tabs, segmented control, jelly
+@deps none
+@support Evergreen browsers
+@description Interface pieces that melt into each other like liquid. A "+" button squeezes out menu items that drip away and pop free, and a tab indicator stretches like jelly between tabs. Labels and icons stay perfectly crisp.
+@usage Two stacked layers with identical positions: a .goo-layer (solid shapes, filter: url(#goo-ui)) and a .crisp-layer (icons/text, no filter). Animate the shapes with CSS transitions; the filter does the merging. stdDeviation sets how far blobs reach for each other.
+@source Concept from libraries.dev "Gooey", recreated from scratch
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gooey Menu & Tabs</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #0d0d11; color: #fff; font-family: system-ui, sans-serif; display: flex; gap: 70px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 20px; box-sizing: border-box; }
+
+  /* === EFFECT === */
+  .goo-layer { filter: url(#goo-ui); }
+  .goo-layer, .crisp-layer { position: absolute; inset: 0; }
+  .crisp-layer { pointer-events: none; } .crisp-layer > * { pointer-events: auto; }
+  .spring { transition: transform .55s cubic-bezier(.3, 1.6, .5, 1); }
+
+  /* Floating action menu */
+  .fab { --size: 60px; --gap: 58px; --c: #7c5cff; position: relative; width: var(--size); height: calc(var(--size) + 4 * var(--gap)); }
+  .fab .shape, .fab .btn { position: absolute; left: 0; bottom: 0; width: var(--size); height: var(--size); border-radius: 50%; }
+  .fab .shape { background: var(--c); }
+  .fab .btn { border: 0; background: none; color: #fff; font-size: 20px; display: grid; place-items: center; cursor: pointer; }
+  .fab .item { transform: translateY(0) scale(.6); transition-delay: calc((3 - var(--i)) * 40ms); }
+  .fab.open .item { transform: translateY(calc((var(--i) + 1) * var(--gap) * -1)) scale(.86); transition-delay: calc(var(--i) * 55ms); }
+  .fab .crisp-layer .item { opacity: 0; transition-property: transform, opacity; transition-duration: .55s, .2s; transition-timing-function: cubic-bezier(.3, 1.6, .5, 1), ease; }
+  .fab.open .crisp-layer .item { opacity: 1; }
+  .fab .main-icon { transition: transform .4s cubic-bezier(.3, 1.6, .5, 1); font-size: 28px; font-weight: 300; }
+  .fab.open .main-icon { transform: rotate(135deg); }
+
+  /* Gooey tabs */
+  .gtabs { --c: #f5f5f7; position: relative; display: flex; padding: 6px; border-radius: 999px; background: #1a1a21; }
+  .gtabs .goo-layer, .gtabs .crisp-layer { inset: 6px; }
+  .gtabs .crisp-layer { position: relative; inset: auto; display: flex; }
+  .gtabs .tab { position: relative; z-index: 1; width: 96px; height: 40px; border: 0; background: none; color: #9a9aa8; font: 600 13px system-ui; cursor: pointer; transition: color .3s; }
+  .gtabs .tab[aria-selected="true"] { color: #0d0d11; }
+  .gtabs .blob { position: absolute; top: 0; height: 40px; width: 96px; border-radius: 999px; background: var(--c); transform: translateX(calc(var(--x) * 96px)); }
+  .gtabs .lead  { transition: transform .38s cubic-bezier(.5, 0, .2, 1); }
+  .gtabs .trail { transition: transform .7s cubic-bezier(.5, 0, .1, 1); width: 70px; height: 30px; top: 5px; margin-left: 13px; }
+
+  @media (prefers-reduced-motion: reduce) { .spring, .fab .item, .gtabs .blob { transition-duration: .01s !important; } }
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="goo-ui"><feGaussianBlur in="SourceGraphic" stdDeviation="9" result="b"/>
+      <feColorMatrix in="b" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo"/>
+      <feComposite in="SourceGraphic" in2="goo" operator="atop"/></filter>
+  </svg>
+
+  <div class="fab" id="fab">
+    <div class="goo-layer" aria-hidden="true">
+      <div class="shape item spring" style="--i:0"></div><div class="shape item spring" style="--i:1"></div>
+      <div class="shape item spring" style="--i:2"></div><div class="shape item spring" style="--i:3"></div>
+      <div class="shape"></div>
+    </div>
+    <div class="crisp-layer">
+      <button class="btn item" style="--i:0" aria-label="Write">✎</button><button class="btn item" style="--i:1" aria-label="Image">▣</button>
+      <button class="btn item" style="--i:2" aria-label="Voice">◉</button><button class="btn item" style="--i:3" aria-label="Search">⌕</button>
+      <button class="btn" aria-label="Open menu" aria-expanded="false" id="fab-toggle"><span class="main-icon">+</span></button>
+    </div>
+  </div>
+
+  <div class="gtabs" role="tablist" style="--x:0">
+    <div class="goo-layer" aria-hidden="true"><div class="blob trail"></div><div class="blob lead"></div></div>
+    <div class="crisp-layer">
+      <button class="tab" role="tab" aria-selected="true">Chat</button><button class="tab" role="tab" aria-selected="false">Images</button>
+      <button class="tab" role="tab" aria-selected="false">Voice</button><button class="tab" role="tab" aria-selected="false">Code</button>
+    </div>
+  </div>
+<script>
+  const fab = document.getElementById('fab'), toggle = document.getElementById('fab-toggle');
+  toggle.onclick = () => { const o = fab.classList.toggle('open'); toggle.setAttribute('aria-expanded', o); };
+  fab.querySelectorAll('.crisp-layer .item').forEach(b => b.onclick = () => toggle.click());
+
+  document.querySelectorAll('.gtabs').forEach(tabs => {
+    const btns = [...tabs.querySelectorAll('.tab')];
+    btns.forEach((b, i) => b.onclick = () => {
+      tabs.style.setProperty('--x', i);
+      btns.forEach(x => x.setAttribute('aria-selected', x === b));
+    });
+  });
+  // Demo: open the menu once so the effect is visible in previews
+  setTimeout(() => toggle.click(), 600);
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

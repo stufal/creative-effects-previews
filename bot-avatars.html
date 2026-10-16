@@ -1,0 +1,164 @@
+<!--
+@name Furry Bot Avatars
+@category AI Interface
+@tags ai, agent, avatar, mascot, character, fur, canvas, squash and stretch, idle animation
+@deps none (Canvas 2D)
+@support Evergreen browsers
+@description Plush, furry little characters for your AI agents. Their eyes wander and blink, they hop while working, and they doze off with closed eyes and floating z's when idle. Drawn on a plain canvas, no WebGL. Click one to make it jump.
+@usage new BotAvatar(canvas, { shape: 'clover' | 'flower' | 'ghost' | 'square' | 'blob', color: '#3b82f6' }); avatar.setState('idle' | 'working' | 'sleeping'); avatar.jump(). The fur is rendered once to an offscreen canvas, so each frame is cheap.
+@source Concept from libraries.dev "Bot avatars", recreated from scratch
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Furry Bot Avatars</title>
+<style>
+  html { height: 100%; } body { margin: 0; min-height: 100%; }
+  body { background: #0e0e12; color: #e9e9ef; font-family: system-ui, sans-serif; display: grid; place-items: center; padding: 20px; box-sizing: border-box; }
+  .row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  figure { margin: 0; display: grid; justify-items: center; gap: 6px; }
+  figcaption { font-size: 12px; opacity: .6; }
+  figcaption b { font-weight: 600; opacity: 1; display: block; text-align: center; color: #fff; }
+
+  /* === EFFECT === */
+  .bot { width: 120px; height: 140px; cursor: pointer; display: block; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <figure><canvas class="bot" data-shape="clover" data-color="#1aa3ff" data-state="idle"></canvas><figcaption><b>Clover</b>idle</figcaption></figure>
+    <figure><canvas class="bot" data-shape="flower" data-color="#22c55e" data-state="working"></canvas><figcaption><b>Flower</b>working</figcaption></figure>
+    <figure><canvas class="bot" data-shape="ghost" data-color="#d4d4d8" data-state="sleeping"></canvas><figcaption><b>Ghost</b>sleeping</figcaption></figure>
+    <figure><canvas class="bot" data-shape="square" data-color="#ec4899" data-state="idle"></canvas><figcaption><b>Square</b>idle</figcaption></figure>
+  </div>
+<script>
+  const SHAPES = {   // unit-radius outline as a function of angle a; returns [x, y]
+    blob:   a => { const r = 1 + .05 * Math.sin(3 * a); return [Math.cos(a) * r, Math.sin(a) * r]; },
+    clover: a => { const r = .82 + .2 * Math.abs(Math.cos(2 * a)) ** .6; return [Math.cos(a) * r, Math.sin(a) * r]; },
+    flower: a => { const r = .86 + .14 * Math.cos(6 * a); return [Math.cos(a) * r, Math.sin(a) * r]; },
+    square: a => { const c = Math.cos(a), s = Math.sin(a), r = (Math.abs(c) ** 4 + Math.abs(s) ** 4) ** -.25 * .86; return [c * r, s * r]; },
+    ghost:  a => { const c = Math.cos(a), s = Math.sin(a);
+      return s < 0 ? [c * .9, s * .95] : [c * .9, Math.min(.98, s * 1.25) + .07 * Math.cos(c * 11)]; },   // dome + wavy hem
+  };
+  const shade = (hex, f) => { const n = parseInt(hex.slice(1), 16), k = v => Math.max(0, Math.min(255, Math.round(v * f)));
+    return `rgb(${k(n >> 16)},${k((n >> 8) & 255)},${k(n & 255)})`; };
+
+  class BotAvatar {
+    constructor(canvas, { shape = 'blob', color = '#3b82f6', state = 'idle' } = {}) {
+      Object.assign(this, { canvas, shape, color, state, ctx: canvas.getContext('2d') });
+      const d = Math.min(devicePixelRatio, 2), r = canvas.getBoundingClientRect();
+      canvas.width = r.width * d; canvas.height = r.height * d;
+      this.R = Math.min(canvas.width, canvas.height * .85) * .36;
+      this.body = this.renderBody();
+      this.look = { x: 0, y: 0, tx: 0, ty: 0, next: 0 }; this.blink = 0; this.nextBlink = 1; this.jumpT = -9;
+      this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      canvas.addEventListener('click', () => this.jump());
+      this.t0 = performance.now(); requestAnimationFrame(this.tick);
+    }
+    setState(s) { this.state = s; }
+    jump() { this.jumpT = this.t; }
+    renderBody() {            // fur rendered once to an offscreen canvas
+      const R = this.R, pad = R * .25, size = Math.ceil((R + pad) * 2), c = document.createElement('canvas');
+      c.width = c.height = size; const g = c.getContext('2d'), o = size / 2, f = SHAPES[this.shape];
+      const path = (scale = 1) => { g.beginPath(); for (let i = 0; i <= 120; i++) { const [x, y] = f(i / 120 * 6.283); g[i ? 'lineTo' : 'moveTo'](o + x * R * scale, o + y * R * scale); } g.closePath(); };
+      // base volume
+      path(.94); const base = g.createRadialGradient(o - R * .35, o - R * .4, R * .1, o, o, R * 1.1);
+      base.addColorStop(0, shade(this.color, 1.25)); base.addColorStop(.55, this.color); base.addColorStop(1, shade(this.color, .45));
+      g.fillStyle = base; g.fill();
+      // fur strands: short strokes pointing outward, denser and longer near the edge
+      g.lineCap = 'round';
+      for (let i = 0; i < 4200; i++) {
+        const a = Math.random() * 6.283, [ex, ey] = f(a), d = Math.sqrt(Math.random()) * 1.02;
+        const x = o + ex * R * d, y = o + ey * R * d, len = R * (.05 + .09 * d) * (.6 + Math.random() * .6);
+        const ang = Math.atan2(ey, ex) + (Math.random() - .5) * 1.1 + .35;          // slight combed swirl
+        const light = .55 + .75 * (1 - (ex * .5 + ey * .7 + 1) / 2) + (Math.random() - .5) * .25;  // lit from top-left
+        g.strokeStyle = shade(this.color, light); g.globalAlpha = .55 + Math.random() * .4; g.lineWidth = R * (.012 + Math.random() * .014);
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); g.stroke();
+      }
+      // soft specular highlight
+      g.globalAlpha = 1; g.globalCompositeOperation = 'source-atop';
+      const hi = g.createRadialGradient(o - R * .4, o - R * .45, 0, o - R * .4, o - R * .45, R * .7);
+      hi.addColorStop(0, 'rgb(255 255 255 / .35)'); hi.addColorStop(1, 'rgb(255 255 255 / 0)'); g.fillStyle = hi; g.fillRect(0, 0, size, size);
+      return c;
+    }
+    tick = now => {
+      const t = this.t = this.reduce ? 0 : (now - this.t0) / 1000, { ctx, canvas: c, R } = this, W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      // motion: breathing, hopping (working), jump (click)
+      let lift = 0, sx = 1, sy = 1 + Math.sin(t * 2) * .02;
+      if (this.state === 'working') { const h = Math.abs(Math.sin(t * 4.2)); lift = h * R * .28; sy = 1 + (h - .5) * .08; sx = 2 - sy; }
+      if (this.state === 'sleeping') sy = 1 + Math.sin(t * 1.2) * .035;
+      const j = t - this.jumpT;
+      if (j >= 0 && j < .7) { const p = j / .7; lift += Math.sin(p * Math.PI) * R * .7; const sq = p < .12 ? 1 - p * 2.5 : 1 + Math.sin(p * Math.PI) * .12; sy *= sq; sx /= Math.sqrt(sq); }
+      const cx = W / 2, groundY = H * .9, cy = groundY - R * 1.02 - lift;
+      // contact shadow
+      ctx.fillStyle = 'rgb(0 0 0 / .35)'; ctx.beginPath(); ctx.ellipse(cx, groundY, R * (.75 - lift / R * .25), R * .12, 0, 0, 6.283); ctx.fill();
+      // body (squash from the bottom)
+      ctx.save(); ctx.translate(cx, cy + R); ctx.scale(sx, sy); ctx.translate(0, -R);
+      ctx.drawImage(this.body, -this.body.width / 2, -this.body.height / 2);
+      // eyes
+      const L = this.look;
+      if (t > L.next) { L.tx = (Math.random() - .5) * .5; L.ty = (Math.random() - .5) * .3; L.next = t + 1 + Math.random() * 2; }
+      if (this.state === 'working') { L.tx = Math.sin(t * 1.3) * .2; L.ty = .12; }
+      L.x += (L.tx - L.x) * .12; L.y += (L.ty - L.y) * .12;
+      if (t > this.nextBlink) { this.blink = 1; this.nextBlink = t + 2 + Math.random() * 3; }
+      this.blink = Math.max(0, this.blink - .12);
+      const ex = R * .3, ey = -R * .05, er = R * .13;
+      for (const s of [-1, 1]) {
+        const x = s * ex + L.x * R * .35, y = ey + L.y * R * .35;
+        if (this.state === 'sleeping') {          // closed eyes: little arcs
+          ctx.strokeStyle = '#111'; ctx.lineWidth = R * .05; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.arc(x, y, er * .8, .2, Math.PI - .2); ctx.stroke();
+        } else {
+          const open = 1 - Math.sin(Math.min(1, this.blink) * Math.PI);
+          ctx.fillStyle = '#0d0d10'; ctx.beginPath(); ctx.ellipse(x, y, er * .82, er * 1.15 * Math.max(.08, open), 0, 0, 6.283); ctx.fill();
+          if (open > .4) { ctx.fillStyle = 'rgb(255 255 255 / .9)'; ctx.beginPath(); ctx.arc(x - er * .3, y - er * .45, er * .28, 0, 6.283); ctx.fill(); }
+        }
+      }
+      ctx.restore();
+      // floating z's while sleeping
+      if (this.state === 'sleeping') {
+        ctx.fillStyle = '#fff'; ctx.font = `600 ${R * .28}px system-ui`;
+        for (let k = 0; k < 3; k++) { const p = (t * .4 + k / 3) % 1; ctx.globalAlpha = Math.sin(p * Math.PI) * .8;
+          ctx.fillText('z', cx + R * (.7 + p * .5), cy - R * (.6 + p * .9)); }
+        ctx.globalAlpha = 1;
+      }
+      requestAnimationFrame(this.tick);
+    };
+  }
+
+  document.querySelectorAll('.bot').forEach(c => new BotAvatar(c, { shape: c.dataset.shape, color: c.dataset.color, state: c.dataset.state }));
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

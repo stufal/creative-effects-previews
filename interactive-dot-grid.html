@@ -1,0 +1,88 @@
+<!--
+@name Interactive Dot Grid
+@category Background
+@tags canvas, dots, grid, repel, spring physics, hero background, tech
+@deps none (Canvas 2D)
+@support Evergreen browsers
+@description A calm grid of dots that bulge away from the pointer and light up near it, then spring back with damped physics — a tactile, techy hero background.
+@usage Place <canvas class="dot-grid"> behind content. Tweak SPACING, RADIUS, FORCE and colours at the top of the script.
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interactive Dot Grid</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #060608; color: #fff; font-family: system-ui, sans-serif; display: grid; place-content: center; text-align: center; }
+  h1 { position: relative; margin: 0; font-size: clamp(36px, 8vw, 90px); letter-spacing: -.05em; pointer-events: none; }
+
+  /* === EFFECT === */
+  .dot-grid { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; }
+</style>
+</head>
+<body>
+  <canvas class="dot-grid" aria-hidden="true"></canvas>
+  <h1>Touch the grid</h1>
+<script>
+  const SPACING = 26, RADIUS = 150, FORCE = 38, BASE = [255, 255, 255, .16], HOT = [140, 120, 255];
+  const cv = document.querySelector('.dot-grid'), ctx = cv.getContext('2d');
+  let dots = [], W = 0, H = 0, mouse = { x: -1e4, y: -1e4 };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const resize = () => {
+    const dpr = Math.min(devicePixelRatio, 2);
+    W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dots = [];
+    for (let y = SPACING / 2; y < H; y += SPACING) for (let x = SPACING / 2; x < W; x += SPACING) dots.push({ ox: x, oy: y, x, y, vx: 0, vy: 0 });
+  };
+  addEventListener('resize', resize); resize();
+  addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  document.addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
+  (function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const d of dots) {
+      const dx = d.ox - mouse.x, dy = d.oy - mouse.y, dist = Math.hypot(dx, dy);
+      const t = Math.max(0, 1 - dist / RADIUS);
+      const tx = d.ox + (dist ? dx / dist : 0) * t * t * FORCE, ty = d.oy + (dist ? dy / dist : 0) * t * t * FORCE;
+      d.vx = (d.vx + (tx - d.x) * .12) * .78; d.vy = (d.vy + (ty - d.y) * .12) * .78;  // spring + damping
+      d.x += d.vx; d.y += d.vy;
+      const r = 1.2 + t * 2.2;
+      ctx.fillStyle = t > 0 ? `rgba(${HOT.map((h, i) => Math.round(BASE[i] + (h - BASE[i]) * t)).join(',')},${BASE[3] + t * .84})` : `rgba(${BASE.join(',')})`;
+      ctx.beginPath(); ctx.arc(reduce ? d.ox : d.x, reduce ? d.oy : d.y, r, 0, 6.283); ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  })();
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

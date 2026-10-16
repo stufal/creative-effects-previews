@@ -1,0 +1,89 @@
+<!--
+@name Rotating Conic Border Glow
+@category Material & Transition
+@tags @property, conic-gradient, border, glow, border beam, ai, chat input, cta, card, houdini
+@deps none
+@support Evergreen browsers (@property)
+@description A beam of light orbits the border of a card or button and casts a blurred glow behind it — animated with a registered @property angle so the conic-gradient rotates smoothly.
+@usage Add .glow-border to an element. Change --beam colours and --speed. Works on any border-radius. Includes a rainbow "border beam" chat-input preset (see the .chat example).
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rotating Conic Border Glow</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #060609; color: #f2f2f7; font-family: system-ui, sans-serif; display: flex; gap: 40px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 20px; box-sizing: border-box; }
+  .card { width: 260px; padding: 28px; border-radius: 20px; }
+  .card h3 { margin: 0 0 8px; } .card p { margin: 0; font-size: 14px; opacity: .6; line-height: 1.5; }
+  .btn { padding: 16px 30px; border-radius: 999px; font-weight: 600; cursor: pointer; }
+  .chat { width: min(460px, 100%); border-radius: 18px; padding: 14px 16px; display: grid; gap: 14px; cursor: text; }
+  .chat input { all: unset; font-size: 14px; color: #f2f2f7; }
+  .chat input::placeholder { color: #6f6f7d; }
+  .chat-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #8b8b98; }
+  .chat .send { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #26262f; color: #fff; }
+
+  /* === EFFECT === */
+  @property --angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  .glow-border {
+    --beam: #7c5cff, #ff5ca8, #ffb85c; --speed: 4s; --bw: 1.5px; --fill: #0d0d13;
+    position: relative; isolation: isolate; border: var(--bw) solid transparent;
+    background:   /* the beam ring (the inner area is covered by ::after) */
+      conic-gradient(from var(--angle), transparent 0 55%, var(--beam), transparent 95%) border-box,
+      linear-gradient(rgb(255 255 255 / .1), rgb(255 255 255 / .1)) border-box;
+    animation: spin var(--speed) linear infinite;
+  }
+  .glow-border::before { /* soft outer glow */
+    content: ""; position: absolute; inset: calc(var(--bw) * -1); z-index: -2; border-radius: inherit;
+    background: conic-gradient(from var(--angle), transparent 0 55%, var(--beam), transparent 95%);
+    filter: blur(18px); opacity: .7; animation: inherit;
+  }
+  .glow-border::after { /* inner fill, layered above the glow so it only shows outside */
+    content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--fill);
+  }
+  @keyframes spin { to { --angle: 360deg; } }
+  @media (prefers-reduced-motion: reduce) { .glow-border, .glow-border::before { animation: none; --angle: 200deg; } }
+</style>
+</head>
+<body>
+  <div class="card glow-border"><h3>Pro plan</h3><p>Everything in Free, plus unlimited projects and priority rendering.</p></div>
+  <button class="btn glow-border" style="color:#fff;--speed:2.5s">✦ Generate</button>
+  <!-- Preset: AI chat input with a rainbow beam -->
+  <label class="chat glow-border" style="--beam:#ff4d8d,#ffb347,#4ade80,#38bdf8,#a78bfa;--speed:3.2s;--bw:1px">
+    <input placeholder="Build anything…" aria-label="Prompt">
+    <span class="chat-row"><span>＋ · Agent ▾ · Auto ▾</span><span class="send">↑</span></span>
+  </label>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

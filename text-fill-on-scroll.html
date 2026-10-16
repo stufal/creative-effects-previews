@@ -1,0 +1,83 @@
+<!--
+@name Text Fill on Scroll
+@category Scroll
+@tags words, opacity, scrub, storytelling, apple-style
+@deps none
+@support Evergreen browsers
+@description A large statement paragraph starts dimmed; each word lights up in reading order as you scroll through it — the Apple / Linear storytelling look.
+@usage Add data-scroll-fill to any text block. Words are split automatically. Tweak START/END (fractions of viewport height) to change when the fill starts and completes.
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Text Fill on Scroll</title>
+<style>
+  body { margin: 0; background: #08080b; color: #fff; font-family: system-ui, sans-serif; }
+  .spacer { height: 60vh; display: grid; place-items: center; opacity: .4; font-size: 13px; letter-spacing: .2em; text-transform: uppercase; }
+  .statement { max-width: 900px; margin: 0 auto; padding: 0 24px; font-size: clamp(28px, 6vw, 64px); line-height: 1.1; font-weight: 650; letter-spacing: -.03em; }
+
+  /* === EFFECT === */
+  [data-scroll-fill] .w { opacity: var(--o, .15); transition: opacity .15s linear; }
+  [data-scroll-fill] .w.accent { color: #a78bfa; }
+</style>
+</head>
+<body>
+  <div class="spacer">Scroll ↓</div>
+  <p class="statement" data-scroll-fill>We build products that feel <span class="accent">inevitable</span> — calm interfaces, sharp details, and motion that explains instead of decorates.</p>
+  <div class="spacer" style="height:90vh"></div>
+<script>
+  const START = 0.85, END = 0.35; // viewport fractions where fill begins / completes
+  document.querySelectorAll('[data-scroll-fill]').forEach(el => {
+    // split into words, keeping inline wrappers (e.g. .accent) as classes
+    const words = [];
+    const walk = (node, cls) => [...node.childNodes].forEach(n => {
+      if (n.nodeType === 3) n.textContent.split(/(\s+)/).forEach(t => words.push(/^\s+$/.test(t) || !t ? t : { t, cls }));
+      else walk(n, n.className || cls);
+    });
+    walk(el, '');
+    el.setAttribute('aria-label', el.textContent.trim());
+    el.innerHTML = words.map(w => typeof w === 'string' ? w : `<span class="w ${w.cls}" aria-hidden="true">${w.t}</span>`).join('');
+    const spans = [...el.querySelectorAll('.w')];
+    const update = () => {
+      const r = el.getBoundingClientRect(), vh = innerHeight;
+      const p = Math.min(1, Math.max(0, (vh * START - r.top) / (vh * (START - END) + r.height)));
+      spans.forEach((s, i) => s.style.setProperty('--o', Math.min(1, Math.max(.15, p * spans.length - i + .15))));
+    };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return spans.forEach(s => s.style.setProperty('--o', 1));
+    addEventListener('scroll', update, { passive: true }); addEventListener('resize', update); update();
+  });
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!--
+@name Magnetic Button
+@category Cursor & Hover
+@tags button, magnetic, cursor, elastic, cta
+@deps none
+@support Evergreen browsers; inert on touch
+@description Buttons are pulled toward the cursor when it comes near, with the label drifting further than the shell for parallax; on leave they snap back with an elastic overshoot.
+@usage Add data-magnetic to any element and wrap its label in .magnetic-label. Tune data-strength (0–1) and RADIUS.
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Magnetic Button</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #0c0c10; font-family: system-ui, sans-serif; display: flex; gap: 48px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .btn { border: 0; font: 600 16px system-ui; padding: 22px 38px; border-radius: 999px; background: #f5f5f7; color: #0c0c10; cursor: pointer; }
+  .btn.round { width: 130px; height: 130px; padding: 0; background: #7c5cff; color: #fff; }
+
+  /* === EFFECT === */
+  [data-magnetic], .magnetic-label { display: inline-block; transition: transform .6s cubic-bezier(.34, 1.8, .5, 1); will-change: transform; }
+  [data-magnetic].is-active, [data-magnetic].is-active .magnetic-label { transition: transform .15s ease-out; }
+</style>
+</head>
+<body>
+  <button class="btn" data-magnetic data-strength=".35"><span class="magnetic-label">Get started</span></button>
+  <button class="btn round" data-magnetic data-strength=".5"><span class="magnetic-label">Play ▶</span></button>
+<script>
+  const RADIUS = 1.6; // activation radius as multiple of element half-size
+  if (matchMedia('(hover: hover)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const els = [...document.querySelectorAll('[data-magnetic]')];
+    addEventListener('pointermove', e => els.forEach(el => {
+      const r = el.getBoundingClientRect(), s = +el.dataset.strength || .35;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2, dx = e.clientX - cx, dy = e.clientY - cy;
+      const inside = Math.hypot(dx / (r.width / 2), dy / (r.height / 2)) < RADIUS;
+      const label = el.querySelector('.magnetic-label');
+      el.classList.toggle('is-active', inside);
+      el.style.transform = inside ? `translate(${dx * s}px, ${dy * s}px)` : '';
+      if (label) label.style.transform = inside ? `translate(${dx * s * .5}px, ${dy * s * .5}px)` : '';
+    }));
+  }
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

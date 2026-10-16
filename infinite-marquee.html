@@ -1,0 +1,87 @@
+<!--
+@name Infinite Marquee
+@category Text
+@tags marquee, ticker, loop, logos, css only, edge fade, skew
+@deps none
+@support Evergreen browsers
+@description Seamless endlessly looping rows of text or logos, in opposite directions, with faded edges and pause-on-hover. A tilted variant adds energy.
+@usage Put items inside .marquee-track ONCE; the script duplicates them for a seamless loop. Set --duration and data-reverse per row.
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Infinite Marquee</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #0b0b0f; color: #fff; font-family: system-ui, sans-serif; display: grid; align-content: center; gap: 28px; }
+  .item { font-size: clamp(32px, 7vw, 72px); font-weight: 800; letter-spacing: -.04em; white-space: nowrap; }
+  .item.outline { color: transparent; -webkit-text-stroke: 1.5px #fff; }
+  .star { color: #c8f560; font-size: .6em; vertical-align: middle; }
+  .tilted { rotate: -4deg; background: #c8f560; color: #0b0b0f; padding: 14px 0; margin: 0 -20px; }
+  .tilted .star { color: #0b0b0f; }
+
+  /* === EFFECT === */
+  .marquee {
+    --duration: 22s; --gap: 2.5rem;
+    display: flex; overflow: hidden; user-select: none;
+    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  }
+  .marquee-track {
+    display: flex; flex-shrink: 0; gap: var(--gap); padding-right: var(--gap); align-items: center;
+    animation: marquee var(--duration) linear infinite;
+  }
+  .marquee[data-reverse] .marquee-track { animation-direction: reverse; }
+  .marquee:hover .marquee-track { animation-play-state: paused; }
+  @keyframes marquee { to { transform: translateX(-100%); } }
+  @media (prefers-reduced-motion: reduce) { .marquee-track { animation-duration: calc(var(--duration) * 4); } }
+</style>
+</head>
+<body>
+  <div class="marquee"><div class="marquee-track">
+    <span class="item">Strategy</span><span class="item star">✦</span><span class="item outline">Identity</span><span class="item star">✦</span><span class="item">Interaction</span><span class="item star">✦</span><span class="item outline">Motion</span><span class="item star">✦</span>
+  </div></div>
+  <div class="marquee tilted" data-reverse style="--duration:16s"><div class="marquee-track">
+    <span class="item">Available for projects</span><span class="item star">●</span><span class="item">Say hello</span><span class="item star">●</span>
+  </div></div>
+<script>
+  // Duplicate each track (enough copies to overflow wide screens) for a seamless loop
+  document.querySelectorAll('.marquee').forEach(m => {
+    const track = m.querySelector('.marquee-track');
+    const copies = Math.max(1, Math.ceil(m.offsetWidth / track.offsetWidth));
+    for (let i = 0; i < copies; i++) { const c = track.cloneNode(true); c.setAttribute('aria-hidden', 'true'); m.append(c); }
+  });
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

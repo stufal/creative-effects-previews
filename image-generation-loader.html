@@ -1,0 +1,122 @@
+<!--
+@name Image Generation Loader
+@category AI Interface
+@tags ai, image generation, loader, pixel mosaic, depixelate, dissolve, canvas, placeholder
+@deps none (Canvas 2D)
+@support Evergreen browsers
+@description While an image is "generating", a churning mosaic of coloured pixels shimmers in place; when it's ready the mosaic sharpens through coarse-to-fine pixelation and dissolves cell by cell into the real picture.
+@usage const fx = new ImageGenLoader(canvas, { palette }); then fx.reveal(imgOrUrl) once the image is ready; fx.reset() to start again. The canvas CSS size sets the output size.
+@source Concept from libraries.dev "Image generation", recreated from scratch (Canvas 2D instead of WebGL)
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image Generation Loader</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #0b0b0e; color: #e9e9ef; font-family: system-ui, sans-serif; display: grid; place-content: center; justify-items: center; gap: 16px; padding: 20px; }
+  .meta { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+  .meta span { opacity: .6; min-width: 120px; }
+  button { font: 600 12px system-ui; padding: 8px 14px; border-radius: 999px; border: 1px solid rgb(255 255 255 / .2); background: none; color: #fff; cursor: pointer; }
+
+  /* === EFFECT === */
+  .gen-canvas { width: min(360px, 80vw, 70vh); aspect-ratio: 1; border-radius: 20px; display: block; background: #15151b; }
+</style>
+</head>
+<body>
+  <canvas class="gen-canvas" aria-label="Generated image"></canvas>
+  <div class="meta"><span id="st">Generating…</span><button id="again">Generate again</button></div>
+<script>
+  class ImageGenLoader {
+    constructor(canvas, { palette = ['#1b4332', '#2d6a4f', '#40916c', '#d8c3a5', '#f4f1de', '#6b705c', '#3a5a40'], cells = 24 } = {}) {
+      Object.assign(this, { canvas, palette, cells, ctx: canvas.getContext('2d') });
+      this.small = document.createElement('canvas');            // offscreen for pixelation
+      this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const r = canvas.getBoundingClientRect(), d = Math.min(devicePixelRatio, 2);
+      canvas.width = r.width * d; canvas.height = r.height * d;
+      this.reset(); requestAnimationFrame(this.tick);
+    }
+    reset() {
+      this.img = null; this.p = 0; this.seed = Array.from({ length: this.cells ** 2 }, () => Math.random());
+      this.cols = this.seed.map(() => this.palette[Math.floor(Math.random() * this.palette.length)]);
+    }
+    async reveal(src) {
+      const img = typeof src === 'string' ? Object.assign(new Image(), { crossOrigin: 'anonymous', src }) : src;
+      await (img.complete && img.naturalWidth ? Promise.resolve() : img.decode());
+      this.img = img; this.start = performance.now();
+      return new Promise(res => this.done = res);
+    }
+    drawPixelated(n) { // draw image at n×n resolution, upscaled with hard edges (no pixel reads → works cross-origin)
+      const { ctx, canvas: c, small: s, img } = this;
+      s.width = s.height = n; const sc = s.getContext('2d');
+      const k = Math.min(img.naturalWidth, img.naturalHeight);         // centre-crop to square
+      sc.drawImage(img, (img.naturalWidth - k) / 2, (img.naturalHeight - k) / 2, k, k, 0, 0, n, n);
+      ctx.imageSmoothingEnabled = n >= c.width; ctx.drawImage(s, 0, 0, c.width, c.height);
+    }
+    tick = now => {
+      const { ctx, canvas: c, cells } = this, W = c.width, cw = W / cells, t = now / 1000;
+      if (this.img) this.p = this.reduce ? 1 : Math.min(1, (now - this.start) / 1800);
+      const p = this.p, ease = 1 - (1 - p) ** 3;
+      if (this.img) this.drawPixelated(p >= 1 ? W : Math.round(cells * 2 ** (ease * 4.5)));   // 24 → ~540 px grid
+      // churning mosaic cells, dissolving away as p grows
+      for (let i = 0; i < cells * cells; i++) {
+        if (this.seed[i] < ease * 1.15) continue;
+        if (Math.random() < .04) this.cols[i] = this.palette[Math.floor(Math.random() * this.palette.length)];
+        const x = i % cells, y = (i / cells) | 0;
+        ctx.globalAlpha = .55 + .45 * Math.sin(t * 3 + this.seed[i] * 20);
+        ctx.fillStyle = this.cols[i]; ctx.fillRect(x * cw, y * cw, cw + .5, cw + .5);
+      }
+      ctx.globalAlpha = 1;
+      if (p >= 1 && this.done) { this.done(); this.done = null; }
+      requestAnimationFrame(this.tick);
+    };
+  }
+
+  // Demo: fake a 3 s generation, then reveal. Falls back to a procedural image if offline.
+  const fx = new ImageGenLoader(document.querySelector('.gen-canvas'));
+  const st = document.getElementById('st');
+  const fallback = () => { const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(180, 160, 20, 256, 256, 400); gr.addColorStop(0, '#f4f1de'); gr.addColorStop(.4, '#40916c'); gr.addColorStop(1, '#1b4332');
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 512); g.fillStyle = '#d8c3a5'; g.beginPath(); g.ellipse(300, 330, 120, 70, -.3, 0, 6.283); g.fill();
+    const img = new Image(); img.src = c.toDataURL(); return img; };
+  async function run() {
+    fx.reset(); st.textContent = 'Generating…';
+    await new Promise(r => setTimeout(r, 3000));
+    try { await fx.reveal('https://picsum.photos/id/1074/800/800'); } catch { await fx.reveal(fallback()); }
+    st.textContent = 'Done ✓';
+  }
+  document.getElementById('again').onclick = run; run();
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>

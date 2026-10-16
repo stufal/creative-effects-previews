@@ -1,0 +1,77 @@
+<!--
+@name Circular Reveal Theme Toggle
+@category Material & Transition
+@tags dark mode, theme toggle, view transitions, clip-path, circle wipe
+@deps none
+@support View Transitions in Chrome/Edge 111+, Safari 18+, Firefox 144+; instant toggle elsewhere
+@description Switching light/dark mode floods the new theme outward in an expanding circle from the exact point you clicked — a View Transition with a clip-path animation on the new snapshot.
+@usage Call toggleTheme(event) from any button. Theme is driven by [data-theme] on <html>; swap in your own tokens.
+@source original
+@added 2026-10-16
+-->
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Circular Reveal Theme Toggle</title>
+<style>
+  :root { --bg: #f5f3ee; --fg: #151515; --muted: #77746d; --card: #fff; }
+  [data-theme="dark"] { --bg: #0d0d12; --fg: #f1f1f5; --muted: #8b8b98; --card: #17171f; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; display: grid; place-content: center; gap: 20px; text-align: center; padding: 20px; }
+  h1 { margin: 0; font-size: clamp(36px, 8vw, 80px); letter-spacing: -.05em; }
+  p { margin: 0; color: var(--muted); }
+  .toggle { justify-self: center; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--card); color: var(--fg); font-size: 24px; cursor: pointer; box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+
+  /* === EFFECT === */
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+</style>
+</head>
+<body>
+  <h1>Day &amp; Night</h1>
+  <p>Click the toggle — the new theme spreads from the click.</p>
+  <button class="toggle" onclick="toggleTheme(event)" aria-label="Toggle theme">◐</button>
+<script>
+  function toggleTheme(e) {
+    const html = document.documentElement;
+    const apply = () => { html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark'; };
+    if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return apply();
+    const x = e?.clientX ?? innerWidth / 2, y = e?.clientY ?? innerHeight / 2;
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    document.startViewTransition(apply).ready.then(() => {
+      html.animate({ clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 650, easing: 'cubic-bezier(.65, 0, .35, 1)', pseudoElement: '::view-transition-new(root)' });
+    });
+  }
+</script>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  if (!new URLSearchParams(location.search).has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, t = 0, last = null
+  function tick() {
+    t += 1 / 60
+    if (!real) {
+      const max = document.documentElement.scrollHeight - innerHeight
+      if (max > 20) { y += dir * Math.max(1, max / 420); if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+      const x = innerWidth * (.5 + .32 * Math.sin(t * 1.3)), py = innerHeight * (.5 + .28 * Math.sin(t * 2.1)), o = { bubbles: true, clientX: x, clientY: py }
+      const el = document.elementFromPoint(x, py)
+      if (el !== last) {
+        const a = chain(last), b = chain(el)
+        a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+        if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+        b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+        last = el
+      }
+      ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+    }
+    requestAnimationFrame(tick)
+  }
+  setTimeout(tick, 400)
+})()</script>
+</body>
+</html>
