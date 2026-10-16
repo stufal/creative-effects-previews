@@ -16,7 +16,9 @@
 <script>(() => {
   const q = new URLSearchParams(location.search); if (!q.has('preview')) return
   document.documentElement.classList.add('fx-preview')
-  const RATE = 1, hoverMode = q.get('preview') === 'hover'
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
   const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
   let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
   const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
@@ -37,7 +39,7 @@
   let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
   function ghost(t, dt) {
     const max = document.documentElement.scrollHeight - innerHeight
-    if (max > 20) { y += dir * max * dt / 8000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
     const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
     const el = document.elementFromPoint(x, py)
     if (el !== last2) {
