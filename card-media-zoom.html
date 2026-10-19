@@ -1,0 +1,140 @@
+<!--
+@name Card Media Zoom
+@category Cursor & Hover
+@tags hover, card, image zoom, portfolio, case study grid, rounded frame, text drift, css only
+@deps none
+@support Evergreen browsers; inert on touch, focus-visible works with the keyboard
+@description On hover, a case-study card's image slowly zooms inside its fixed rounded frame while the title and description drift down a few pixels, so the picture seems to come forward. Calm, premium portfolio-grid motion.
+@usage Pure CSS: give each card the class .zoom-card with a .zoom-media frame (holding an <img> or <video>) and a .zoom-text block. Tune --zoom (1.05), --duration (0.6s), --title-shift, --desc-shift and --radius on .zoom-grid or a single card. Works for <a> cards with the keyboard too.
+@source Technique seen on tubikstudio.com (Featured work), rebuilt from scratch
+@added 2026-10-19
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card Media Zoom</title>
+<style>
+  html { height: 100%; } body { margin: 0; min-height: 100%; }
+  body { background: #f4f3f0; color: #141414; font-family: system-ui, sans-serif; padding: 32px 24px; box-sizing: border-box; display: grid; place-items: center; }
+  .zoom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 28px; width: min(1000px, 100%); }
+  .zoom-grid .wide { grid-column: span 2; }
+  @media (max-width: 560px) { .zoom-grid .wide { grid-column: auto; } }
+  .art { width: 100%; height: 100%; display: block; object-fit: cover; }
+  .art.a { background: radial-gradient(circle at 30% 30%, #ffcf5c, transparent 45%), linear-gradient(135deg, #ff5c38, #7a1fff); }
+  .art.b { background: radial-gradient(circle at 70% 40%, #8fe3ff, transparent 40%), linear-gradient(160deg, #0b3d91, #1fd1a5); }
+  .art.c { background: repeating-linear-gradient(45deg, #111 0 14px, #c8f560 14px 28px); }
+  .art.d { background: radial-gradient(circle at 50% 60%, #fff 0 12%, transparent 13%), linear-gradient(135deg, #ff7ab6, #ffb85c); }
+  .art.e { background: conic-gradient(from 200deg at 60% 40%, #1d1d22, #4f7cff, #ff5ca8, #1d1d22); }
+  .tag { display: inline-block; margin-top: 4px; font: 12px ui-monospace, monospace; opacity: .55; }
+
+  /* === EFFECT === */
+  .zoom-grid { --zoom: 1.05; --duration: .6s; --title-shift: 8px; --desc-shift: 12px; --radius: 14px; --ease: cubic-bezier(.22, .61, .36, 1); }
+  .zoom-card { display: grid; gap: 14px; color: inherit; text-decoration: none; outline: none; }
+  .zoom-media { position: relative; aspect-ratio: 4 / 5; overflow: hidden; border-radius: var(--radius); isolation: isolate; background: #ddd; }
+  .zoom-card.wide .zoom-media { aspect-ratio: 16 / 10; }
+  .zoom-media > * { transition: transform var(--duration) var(--ease); transform-origin: 50% 50%; will-change: transform; }
+  .zoom-text h3 { margin: 0; font-size: 20px; letter-spacing: -.02em; transition: transform var(--duration) var(--ease); }
+  .zoom-text p { margin: 4px 0 0; font-size: 14px; line-height: 1.45; opacity: .7; transition: transform var(--duration) var(--ease); }
+  @media (hover: hover) {
+    .zoom-card:is(:hover, .is-hover) .zoom-media > * { transform: scale(var(--zoom)); }
+    .zoom-card:is(:hover, .is-hover) .zoom-text h3 { transform: translateY(var(--title-shift)); }
+    .zoom-card:is(:hover, .is-hover) .zoom-text p { transform: translateY(var(--desc-shift)); }
+  }
+  .zoom-card:focus-visible .zoom-media > * { transform: scale(var(--zoom)); }
+  .zoom-card:focus-visible .zoom-media { outline: 2px solid #4c32ff; outline-offset: 3px; }
+  .zoom-card:focus-visible .zoom-text h3 { transform: translateY(var(--title-shift)); }
+  .zoom-card:focus-visible .zoom-text p { transform: translateY(var(--desc-shift)); }
+  @media (prefers-reduced-motion: reduce) {
+    .zoom-media > *, .zoom-text h3, .zoom-text p { transition: none; transform: none !important; }
+  }
+</style>
+</head>
+<body>
+  <section class="zoom-grid" aria-label="Featured work">
+    <a class="zoom-card wide" href="#"><div class="zoom-media"><div class="art a" role="img" aria-label="Warm abstract cover"></div></div>
+      <div class="zoom-text"><h3>Solstice Records</h3><p>Brand identity and streaming app for an independent label.</p><span class="tag">Branding · App</span></div></a>
+    <a class="zoom-card" href="#"><div class="zoom-media"><div class="art b" role="img" aria-label="Ocean abstract cover"></div></div>
+      <div class="zoom-text"><h3>Tidewater</h3><p>Booking flow for coastal retreats.</p><span class="tag">Web</span></div></a>
+    <a class="zoom-card" href="#"><div class="zoom-media"><div class="art c" role="img" aria-label="Striped cover"></div></div>
+      <div class="zoom-text"><h3>Fieldnote</h3><p>Editorial pages for a design magazine.</p><span class="tag">Editorial</span></div></a>
+    <a class="zoom-card" href="#"><div class="zoom-media"><div class="art d" role="img" aria-label="Sunset cover"></div></div>
+      <div class="zoom-text"><h3>Peachpit Pay</h3><p>Checkout redesign that lifted conversion.</p><span class="tag">Product</span></div></a>
+    <a class="zoom-card wide" href="#"><div class="zoom-media"><div class="art e" role="img" aria-label="Neon cover"></div></div>
+      <div class="zoom-text"><h3>Nightshift</h3><p>Motion system and launch site for a music festival.</p><span class="tag">Motion · Web</span></div></a>
+  </section>
+<script>
+  // Optional: mirrors hover as a class so scripted pointers (previews, tests) trigger the zoom too.
+  // CSS alone is enough on a real site; keep this only if you drive hover programmatically.
+  document.querySelectorAll('.zoom-card').forEach(card => {
+    card.addEventListener('pointerenter', () => card.classList.add('is-hover'));
+    card.addEventListener('pointerleave', () => card.classList.remove('is-hover'));
+  });
+</script>
+</body>
+</html>
