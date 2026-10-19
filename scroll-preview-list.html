@@ -1,0 +1,156 @@
+<!--
+@name Scroll Preview List
+@category Scroll
+@tags scroll, list, active item, picture in picture, floating preview, lightbox, services, offerings, editorial
+@deps none
+@support Evergreen browsers (uses <template> and the Web Animations API); instant swaps with reduced motion
+@description A long list of offerings where the line nearest the middle of the screen turns black and the others fade to gray. A small floating card in the corner shows that item's picture and blurb, crossfading as you scroll. Click the picture and it grows from the card into a full-screen lightbox.
+@usage Wrap items in .spl-list; each .spl-item holds its label and a <template> with the preview (.spl-art and a <p>). Keep one <aside class="spl-pip"> on the page. Tune --pip-width, --active, --inactive, --fade and the lightbox --zoom-duration in CSS, and ACTIVE_ZONE (share of the viewport height that counts as "near the middle") in the script.
+@source Technique seen on mad.ac/approach (Offerings), rebuilt from scratch
+@added 2026-10-19
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scroll Preview List</title>
+<style>
+  body { margin: 0; background: #f2f1ee; color: #121212; font-family: system-ui, sans-serif; }
+  .intro, .outro { min-height: 55vh; display: grid; place-items: center; font-size: 14px; opacity: .55; }
+  .art-1 { background: radial-gradient(circle at 30% 35%, #ffd35c 0 18%, transparent 19%), linear-gradient(135deg, #ff5f3a, #8a2bff); }
+  .art-2 { background: repeating-linear-gradient(90deg, #121212 0 10px, #e6ff5c 10px 20px); }
+  .art-3 { background: conic-gradient(from 90deg at 50% 50%, #2b59ff, #6af2ff, #fff, #2b59ff); }
+  .art-4 { background: radial-gradient(circle at 70% 60%, #fff 0 10%, transparent 11%), linear-gradient(160deg, #0c3b2e, #3fd18f); }
+  .art-5 { background: linear-gradient(0deg, #ff7ab6 0 33%, #ffe0ef 33% 66%, #1b1b1f 66%); }
+  .art-6 { background: radial-gradient(ellipse at 50% 120%, #ff9a3c, #4b1d6b 60%, #121226); }
+
+  /* === EFFECT === */
+  :root { --pip-width: 260px; --active: #121212; --inactive: #b9b8b3; --fade: .35s; --zoom-duration: 300ms; }
+  .spl-list { list-style: none; margin: 0; padding: 0 24px; }
+  .spl-item { font-size: clamp(30px, 6.5vw, 76px); line-height: 1.08; letter-spacing: -.035em; font-weight: 600; color: var(--inactive); transition: color var(--fade); cursor: default; }
+  .spl-item.is-active { color: var(--active); }
+  .spl-pip { position: fixed; right: 24px; bottom: 24px; width: var(--pip-width); padding: 10px; border-radius: 12px; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,.12); font-size: 13px; line-height: 1.4; z-index: 5;
+             opacity: 0; transform: translateY(12px); transition: opacity var(--fade), transform var(--fade); pointer-events: none; }
+  .spl-pip[data-active] { opacity: 1; transform: none; pointer-events: auto; }
+  .spl-pip .spl-art { aspect-ratio: 16 / 10; border-radius: 7px; cursor: zoom-in; animation: spl-in var(--fade) both; }
+  .spl-pip p { margin: 8px 2px 2px; animation: spl-in var(--fade) both; }
+  @keyframes spl-in { from { opacity: 0; filter: blur(6px); } }
+  .spl-lightbox { position: fixed; inset: auto; margin: 0; padding: 0; border: 0; outline: none; max-width: none; max-height: none; background: transparent; overflow: visible; cursor: zoom-out; }
+  .spl-lightbox::backdrop { background: rgba(10,10,10,.85); }
+  .spl-lightbox .spl-art { width: 100%; height: 100%; border-radius: 10px; }
+  @media (max-width: 600px) { :root { --pip-width: 180px; } }
+  @media (prefers-reduced-motion: reduce) { .spl-item, .spl-pip { transition: none; } .spl-pip .spl-art, .spl-pip p { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="intro">Scroll ↓ the offerings</div>
+  <ul class="spl-list">
+    <li class="spl-item">Brand strategy<template><div class="spl-art art-1"></div><p>Positioning, naming and the story that ties a company together.</p></template></li>
+    <li class="spl-item">Identity systems<template><div class="spl-art art-2"></div><p>Logos, type and color built to flex across every touchpoint.</p></template></li>
+    <li class="spl-item">Websites<template><div class="spl-art art-3"></div><p>Fast, expressive sites designed and engineered in-house.</p></template></li>
+    <li class="spl-item">Product design<template><div class="spl-art art-4"></div><p>Apps and dashboards people actually enjoy using.</p></template></li>
+    <li class="spl-item">Motion<template><div class="spl-art art-5"></div><p>Animated brand assets, launch films and UI choreography.</p></template></li>
+    <li class="spl-item">Creative technology<template><div class="spl-art art-6"></div><p>Shaders, simulations and installations that feel alive.</p></template></li>
+  </ul>
+  <div class="outro">End of list</div>
+  <aside class="spl-pip" aria-live="polite"></aside>
+<script>
+  // === EFFECT JS ===
+  const ACTIVE_ZONE = 0.2;   // the PiP shows while the nearest item is within this share of the viewport from the center
+  const items = [...document.querySelectorAll('.spl-item')], pip = document.querySelector('.spl-pip');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let current = null;
+  const update = () => {
+    const mid = innerHeight / 2;
+    let best = null, dist = Infinity;
+    for (const it of items) { const r = it.getBoundingClientRect(), d = Math.abs(r.top + r.height / 2 - mid); if (d < dist) { dist = d; best = it; } }
+    pip.toggleAttribute('data-active', dist < innerHeight * ACTIVE_ZONE);
+    if (best === current) return;
+    current?.classList.remove('is-active'); best.classList.add('is-active'); current = best;
+    pip.replaceChildren(best.querySelector('template').content.cloneNode(true));
+  };
+  addEventListener('scroll', update, { passive: true }); addEventListener('resize', update); update();
+
+  // click the picture: it grows from the card into a lightbox, click again to shrink it back
+  pip.addEventListener('click', e => {
+    const art = e.target.closest('.spl-art'); if (!art) return;
+    const from = art.getBoundingClientRect(), dur = reduce ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom-duration')) || 300;
+    const box = document.createElement('dialog'); box.className = 'spl-lightbox'; box.append(art.cloneNode(true)); document.body.append(box); box.showModal();
+    const w = Math.min(innerWidth * .9, innerHeight * .9 * 1.6), h = w / 1.6;
+    const rect = r => ({ left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    const to = { left: (innerWidth - w) / 2, top: (innerHeight - h) / 2, width: w, height: h };
+    box.animate([rect(from), rect(to)], { duration: dur, easing: 'ease', fill: 'forwards' });
+    box.addEventListener('click', () => {
+      const back = art.getBoundingClientRect();
+      box.animate([rect(to), rect(back)], { duration: dur, easing: 'ease', fill: 'forwards' }).finished.then(() => box.remove());
+    }, { once: true });
+    box.addEventListener('cancel', () => box.remove());
+  });
+</script>
+</body>
+</html>

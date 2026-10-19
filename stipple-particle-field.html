@@ -1,0 +1,157 @@
+<!--
+@name Stipple Particle Field
+@category Background
+@tags particles, stipple, pointillism, dots, terrain, canvas, cursor repel, generative, monochrome, editorial
+@deps none (Canvas 2D)
+@support Evergreen browsers; static first frame with reduced motion
+@description Thousands of tiny dots stipple a slowly rolling landscape: dense hills at the bottom, a beaded crest line and a few stray particles drifting above. The cursor pushes dots aside and they ease back into place. Set data-text and the dots draw a word instead.
+@usage <canvas class="stipple" data-color="#111111"> inside a sized container. Add data-text="MAD" to stipple a word instead of hills. Tune COUNT, DOT, SPEED, RADIUS, FORCE and FLOATERS at the top of the script; the canvas follows its container size.
+@source Technique seen on mad.ac/approach (particle simulation), rebuilt from scratch
+@added 2026-10-19
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stipple Particle Field</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { background: #f3f3f1; color: #111; font-family: system-ui, sans-serif; display: grid; grid-template-rows: auto 1fr; gap: 18px; padding: 24px; box-sizing: border-box; }
+  h1 { margin: 0; max-width: 16ch; font-size: clamp(26px, 5vw, 54px); line-height: 1.02; letter-spacing: -.03em; font-weight: 650; }
+  .surface { position: relative; border-radius: 6px; overflow: hidden; background: #e9e9e6; min-height: 240px; }
+
+  /* === EFFECT === */
+  .stipple { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+</style>
+</head>
+<body>
+  <h1>Long lasting digital experiences, built dot by dot.</h1>
+  <figure class="surface" style="margin:0"><canvas class="stipple" data-color="#141414" aria-hidden="true"></canvas></figure>
+<script>
+  // === EFFECT JS ===
+  const COUNT = 11000, DOT = 1.3, SPEED = 1, RADIUS = 90, FORCE = 26, FLOATERS = 0.06;
+  document.querySelectorAll('.stipple').forEach(canvas => {
+    const ctx = canvas.getContext('2d'), reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let W = 0, H = 0, dpr = 1, pts = [], mouse = { x: -1e4, y: -1e4 };
+    const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(7);
+    // rolling horizon made of a few slow sine waves (0 = top, 1 = bottom)
+    const horizon = (x, t) => .1 * Math.sin(x * 4.3 + t * .35) + .06 * Math.sin(x * 9.7 - t * .5 + 1.7) + .02 * Math.sin(x * 21 + t * .9);
+    const textMask = () => {                       // pixel positions inside the word, for data-text mode
+      const off = document.createElement('canvas'), w = 400, h = Math.round(400 * H / W); off.width = w; off.height = h;
+      const g = off.getContext('2d'); g.fillStyle = '#000'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      let size = h * .8; g.font = `900 ${size}px system-ui, sans-serif`;
+      while (g.measureText(canvas.dataset.text).width > w * .9 && size > 8) g.font = `900 ${size -= 4}px system-ui, sans-serif`;
+      g.fillText(canvas.dataset.text, w / 2, h / 2);
+      const d = g.getImageData(0, 0, w, h).data, hits = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 128) hits.push([x / w, y / h]);
+      return hits;
+    };
+    const build = () => {
+      const r = canvas.getBoundingClientRect(); dpr = Math.min(devicePixelRatio, 2);
+      W = r.width; H = r.height; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const n = Math.round(COUNT * Math.min(1.6, W * H / (900 * 560))), floaters = Math.round(n * FLOATERS), mask = canvas.dataset.text ? textMask() : null;
+      // stratified (jittered-grid) sampling keeps the stipple even, like blue noise
+      const cols = Math.ceil(Math.sqrt((n - floaters) * W / H)), rows = Math.ceil((n - floaters) / cols);
+      pts = [];
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const u = (i + rnd()) / cols, v = (j + rnd()) / rows;
+        if (mask) { const m = mask[Math.floor(rnd() * mask.length)]; if (!m) continue; pts.push({ u: m[0] + (rnd() - .5) * .004, v: m[1] + (rnd() - .5) * .004, mode: 'text' }); }
+        else pts.push({ u, v: -Math.log(1 - v * .985) * .07, layer: Math.floor(rnd() * 3), mode: 'hill' });   // exponential depth: dense under each crest, fading below
+      }
+      for (let k = 0; k < floaters; k++) pts.push({ u: rnd(), v: rnd(), mode: 'float', ph: rnd() * 6.28 });
+      for (const p of pts) { p.x = p.u * W; p.y = p.v * H; p.vx = 0; p.vy = 0; }
+    };
+    const target = (p, t) => {
+      if (p.mode === 'text') return [p.u * W, p.v * H];
+      if (p.mode === 'float') return [((p.u + t * .004 * SPEED) % 1) * W, (p.v * .55 + .03 * Math.sin(t * .6 + p.ph)) * H];
+      const x = p.u, L = p.layer, top = .42 + L * .17 + horizon(x * (1 + L * .3) + L * 1.9, t * SPEED * (1 - L * .2)) * (1 - L * .25);
+      const crest = p.v < .003 ? .008 * Math.sin(x * 160 + t * 2) : 0;          // beaded crest line
+      return [x * W, (top + crest + p.v) * H];
+    };
+    let t0 = performance.now();
+    const frame = now => {
+      const t = reduce ? 3 : (now - t0) / 1000;
+      ctx.clearRect(0, 0, W, H); ctx.fillStyle = canvas.dataset.color || '#111';
+      for (const p of pts) {
+        const [tx, ty] = target(p, t);
+        let fx = (tx - p.x) * .08, fy = (ty - p.y) * .08;
+        const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
+        if (d2 < RADIUS * RADIUS) { const d = Math.sqrt(d2) || 1, k = (1 - d / RADIUS) * FORCE * .15; fx += dx / d * k; fy += dy / d * k; }
+        p.vx = (p.vx + fx) * .82; p.vy = (p.vy + fy) * .82; p.x += p.vx; p.y += p.vy;
+        ctx.fillRect(p.x, p.y, DOT * (p.mode === 'float' ? 1.2 : 1), DOT);
+      }
+      if (!reduce) requestAnimationFrame(frame);
+    };
+    const move = e => { const r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; };
+    addEventListener('pointermove', move); canvas.addEventListener('pointerleave', () => { mouse.x = mouse.y = -1e4; });
+    new ResizeObserver(() => { build(); if (reduce) frame(0); }).observe(canvas);
+    build(); requestAnimationFrame(frame);
+  });
+</script>
+</body>
+</html>
