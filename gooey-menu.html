@@ -14,7 +14,7 @@
 <head>
 <style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
 <script>(() => {
-  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  const q = new URLSearchParams(window.__fxPreview || location.search); if (!q.has('preview')) return
   document.documentElement.classList.add('fx-preview')
   // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
   // on a full-size page, so they play slightly faster than real time to feel natural
