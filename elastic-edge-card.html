@@ -1,0 +1,193 @@
+<!--
+@name Elastic Edge Card
+@category Cursor & Hover
+@tags hover, card, project grid, elastic, rubber, jelly, sticky edge, clip-path, wobble, portfolio, playful
+@deps none
+@support Evergreen browsers (CSS clip-path: path()); plain cards on touch and with reduced motion
+@description A project card's image behaves like a stretchy membrane. As the cursor comes close the nearest edge dents in, and when the cursor crosses it the edge sticks to the pointer and stretches along. Pull far enough and it lets go and snaps back with a jelly wobble, while a round "View" cursor pops in.
+@usage Give each card .elastic-card with an .elastic-media child (an <img>, <video> or any block). The media is clipped by a live path; the page background shows through the dents. Tune PROXIMITY, PUSH, RANGE, SNAP, STIFFNESS and WOBBLE at the top of the script, and --cursor-size / --cursor-bg for the round cursor.
+@source Technique seen on hellomonday.com (work grid), rebuilt from scratch
+@added 2026-10-19
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(window.__fxPreview || location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elastic Edge Card</title>
+<style>
+  html { height: 100%; } body { margin: 0; min-height: 100%; }
+  body { background: #fff; color: #111; font-family: Georgia, "Times New Roman", serif; padding: 48px 32px; box-sizing: border-box; }
+  .work { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px 48px; max-width: 1100px; margin: 0 auto; align-items: start; }
+  .work .col { display: grid; gap: 56px; }
+  .work .col:nth-child(2) { padding-top: 120px; }
+  @media (max-width: 760px) { .work { grid-template-columns: 1fr 1fr; } .work .col:nth-child(3) { display: none; } .work .col:nth-child(2) { padding-top: 60px; } }
+  .elastic-card { display: grid; gap: 14px; color: inherit; text-decoration: none; }
+  .elastic-card h3 { margin: 0; font-weight: 400; font-size: clamp(17px, 2vw, 24px); line-height: 1.15; display: flex; gap: 8px; align-items: baseline; }
+  .elastic-card h3::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, #111); translate: 0 -2px; }
+  .elastic-card .tags { font: 11px system-ui, sans-serif; color: #999; text-decoration: underline; }
+  .portrait { aspect-ratio: 490 / 647; } .landscape { aspect-ratio: 490 / 276; }
+  .art-a { background: radial-gradient(circle at 35% 40%, #ffe066 0 16%, transparent 17%), linear-gradient(160deg, #4f7cff, #9b5cff); }
+  .art-b { background: linear-gradient(0deg, #ff4f3d 0 40%, #ffd1c9 40% 60%, #1b1b1f 60%); }
+  .art-c { background: radial-gradient(ellipse at 50% 110%, #c8f560, #1fd1a5 45%, #0c3b2e); }
+  .art-d { background: repeating-linear-gradient(-45deg, #111 0 18px, #fff 18px 36px); }
+  .art-e { background: conic-gradient(from 210deg at 60% 45%, #ff7ab6, #ffb85c, #fff3d6, #ff7ab6); }
+  .art-f { background: radial-gradient(circle at 70% 30%, #fff 0 9%, transparent 10%), linear-gradient(135deg, #0b3d91, #6af2ff); }
+
+  /* === EFFECT === */
+  :root { --cursor-size: 74px; --cursor-bg: #111; --cursor-fg: #fff; }
+  .elastic-media { position: relative; display: block; width: 100%; object-fit: cover; will-change: clip-path; }
+  .elastic-card { cursor: default; }
+  .elastic-cursor { position: fixed; left: 0; top: 0; width: var(--cursor-size); height: var(--cursor-size); margin: calc(var(--cursor-size) / -2) 0 0 calc(var(--cursor-size) / -2);
+                    border-radius: 50%; background: var(--cursor-bg); color: var(--cursor-fg); display: grid; place-items: center; font: 600 12px system-ui, sans-serif;
+                    pointer-events: none; z-index: 10; scale: 0; transition: scale .35s cubic-bezier(.34, 1.56, .64, 1); }
+  .elastic-cursor.is-on { scale: 1; }
+  @media (hover: none), (prefers-reduced-motion: reduce) { .elastic-cursor { display: none; } }
+</style>
+</head>
+<body>
+  <section class="work" aria-label="Selected work">
+    <div class="col">
+      <a class="elastic-card" href="#" style="--dot:#4f7cff"><div class="elastic-media portrait art-a" role="img" aria-label="Blue cover"></div><h3>Orbit — a launch site for a space startup</h3><span class="tags">Experiences</span></a>
+      <a class="elastic-card" href="#" style="--dot:#1fd1a5"><div class="elastic-media landscape art-c" role="img" aria-label="Green cover"></div><h3>Fieldkit — tools for park rangers</h3><span class="tags">Product</span></a>
+    </div>
+    <div class="col">
+      <a class="elastic-card" href="#" style="--dot:#ff4f3d"><div class="elastic-media landscape art-b" role="img" aria-label="Red cover"></div><h3>Signal — See yourself in sound</h3><span class="tags">Branding</span></a>
+      <a class="elastic-card" href="#" style="--dot:#ff7ab6"><div class="elastic-media portrait art-e" role="img" aria-label="Pink cover"></div><h3>Bloom — a year in sport</h3><span class="tags">Experiences · Platform</span></a>
+    </div>
+    <div class="col">
+      <a class="elastic-card" href="#" style="--dot:#111"><div class="elastic-media portrait art-d" role="img" aria-label="Striped cover"></div><h3>Monochrome — an alphabet adventure</h3><span class="tags">Games</span></a>
+      <a class="elastic-card" href="#" style="--dot:#0b3d91"><div class="elastic-media landscape art-f" role="img" aria-label="Ocean cover"></div><h3>Tidal — weighted bedding reinvented</h3><span class="tags">Ecommerce</span></a>
+    </div>
+  </section>
+<script>
+  // === EFFECT JS ===
+  const PROXIMITY = 120;   // px: how close the cursor must be before the edge starts to dent
+  const PUSH = 14;         // px: how deep the edge dents in before the cursor touches it
+  const RANGE = 70;        // px: how wide the stretched part of the edge is
+  const SNAP = 95;         // px: pull this far past the edge and it lets go
+  const STIFFNESS = 0.16;  // spring strength (higher = snappier)
+  const WOBBLE = 0.84;     // 0–0.95: how long the jelly wobble lasts after release
+  const SPACING = 10;      // px between points along the edge (smaller = smoother)
+  (() => {
+    if (matchMedia('(hover: none), (prefers-reduced-motion: reduce)').matches) return;
+    const cursor = Object.assign(document.createElement('div'), { className: 'elastic-cursor', textContent: 'View' });
+    document.body.append(cursor);
+    const mouse = { x: -1e4, y: -1e4 };
+    const cards = [...document.querySelectorAll('.elastic-card')].map(card => ({ card, media: card.querySelector('.elastic-media'), pts: [], state: 'idle', hook: null, w: 0, h: 0 }));
+
+    const build = c => {   // points around the rectangle, each with its inward normal
+      const r = c.media.getBoundingClientRect(); c.w = r.width; c.h = r.height; c.pts = [];
+      const edge = (x0, y0, x1, y1, nx, ny) => { const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / SPACING));
+        for (let i = 0; i < n; i++) { const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t; c.pts.push({ rx: x, ry: y, x, y, vx: 0, vy: 0, nx, ny }) } };
+      edge(0, 0, c.w, 0, 0, 1); edge(c.w, 0, c.w, c.h, -1, 0); edge(c.w, c.h, 0, c.h, 0, -1); edge(0, c.h, 0, 0, 1, 0);
+    };
+    cards.forEach(build);
+    new ResizeObserver(() => { cards.forEach(build); kick() }).observe(document.body);
+
+    let running = false;
+    const kick = () => { if (!running) { running = true; requestAnimationFrame(frame) } };
+    function frame() {
+      let busy = false;
+      for (const c of cards) {
+        const r = c.media.getBoundingClientRect(), mx = mouse.x - r.left, my = mouse.y - r.top;
+        const inside = mx > 0 && my > 0 && mx < c.w && my < c.h;
+        // gap between cursor and the rectangle (0 when inside)
+        const gx = Math.max(0, -mx, mx - c.w), gy = Math.max(0, -my, my - c.h), gap = Math.hypot(gx, gy);
+        if (c.state === 'idle' && inside) {            // just crossed the edge: hook the nearest point to the cursor
+          let best = null, bd = Infinity; for (const p of c.pts) { const d = Math.hypot(p.rx - mx, p.ry - my); if (d < bd) { bd = d; best = p } }
+          c.state = 'hooked'; c.hook = best;
+        }
+        if (c.state === 'hooked' && (!inside || Math.hypot(mx - c.hook.rx, my - c.hook.ry) > SNAP)) { c.state = 'free'; cursor.classList.toggle('is-on', inside) }
+        if (c.state === 'free' && !inside && gap > PROXIMITY) c.state = 'idle';
+        const hooked = c.state === 'hooked', k = hooked ? .35 : STIFFNESS, damp = hooked ? .55 : WOBBLE;
+        let moving = false;
+        for (const p of c.pts) {
+          let tx = p.rx, ty = p.ry;
+          if (hooked) {                                  // stretch: points near the hook follow the cursor
+            const f = Math.exp(-((p.rx - c.hook.rx) ** 2 + (p.ry - c.hook.ry) ** 2) / (RANGE * RANGE));
+            tx += (mx - c.hook.rx) * f; ty += (my - c.hook.ry) * f;
+          } else if (c.state === 'idle' && gap < PROXIMITY) {   // approach: the nearest edge dents in
+            const d = Math.hypot(p.rx - mx, p.ry - my), f = Math.max(0, 1 - d / (PROXIMITY + RANGE)) ** 2 * (1 - gap / PROXIMITY);
+            tx += p.nx * PUSH * f; ty += p.ny * PUSH * f;
+          }
+          p.vx = (p.vx + (tx - p.x) * k) * damp; p.vy = (p.vy + (ty - p.y) * k) * damp; p.x += p.vx; p.y += p.vy;
+          if (Math.abs(p.vx) + Math.abs(p.vy) + Math.abs(tx - p.x) + Math.abs(ty - p.y) > .05) moving = true;
+        }
+        const atRest = !moving && !hooked && !(c.state === 'idle' && gap < PROXIMITY);
+        c.media.style.clipPath = atRest ? '' : `path('M${c.pts.map(p => `${Math.max(0, Math.min(c.w, p.x)).toFixed(1)} ${Math.max(0, Math.min(c.h, p.y)).toFixed(1)}`).join('L')}Z')`;
+        if (!atRest) busy = true;
+      }
+      running = busy; if (busy) requestAnimationFrame(frame);
+    }
+    addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; cursor.style.translate = `${e.clientX}px ${e.clientY}px`; kick() }, { passive: true });
+    addEventListener('scroll', kick, { passive: true });
+    cards.forEach(c => c.card.addEventListener('pointerleave', () => { cursor.classList.remove('is-on'); kick() }));
+  })();
+</script>
+</body>
+</html>
