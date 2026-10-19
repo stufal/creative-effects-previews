@@ -1,0 +1,195 @@
+<!--
+@name Silk Turbulence Gradient
+@category Background
+@tags webgl, glsl, shader, turbulence, sine warp, silk, satin, gradient, hero, cta section, customizable palette
+@deps none (raw WebGL 1)
+@support All browsers with WebGL; falls back to a CSS gradient of the same colors
+@description A soft, satin-like gradient whose colors fold into long silky ribbons and drift slowly, like light moving across fabric. Layered sine waves bend the coordinates and the result is mapped onto your own 2–5 color palette.
+@usage <canvas class="silk" data-colors="#ff5c8f,#ff7aa6,#ffa3c4"> behind content, then new SilkGradient(canvas, { speed, scale, turbulence, frequency, iterations, waves, grain }). Change colors at any time with gradient.setColors(['#…', …]) or by editing data-colors. Close shades of one hue give the calm "satin" look; contrasting hues give a bolder flow.
+@source Technique seen on yummygum.com/about (shader background), rebuilt from scratch
+@added 2026-10-19
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<style>html.fx-preview{scrollbar-width:none}html.fx-preview::-webkit-scrollbar{display:none}</style>
+<script>(() => {
+  const q = new URLSearchParams(location.search); if (!q.has('preview')) return
+  document.documentElement.classList.add('fx-preview')
+  // Previews are shown scaled down (cards ≈ 1/5, large preview ≈ 1/3), which makes motion look slower than
+  // on a full-size page, so they play slightly faster than real time to feel natural
+  const hoverMode = q.get('preview') === 'hover', RATE = hoverMode ? 1.5 : 1.2
+  const realNow = performance.now.bind(performance), realRaf = window.requestAnimationFrame.bind(window)
+  let virt = 0, last = realNow(), paused = false, queue = [], ids = 0
+  const now = () => { const n = realNow(); if (!paused) virt += (n - last) * RATE; last = n; return virt }
+  performance.now = now
+  window.requestAnimationFrame = cb => { queue.push([++ids, cb]); return ids }
+  window.cancelAnimationFrame = id => { queue = queue.filter(e => e[0] !== id) }
+  const slowed = new WeakSet(), heldByUs = new Set()
+  const syncAnimations = () => { if (!document.getAnimations) return
+    for (const a of document.getAnimations()) {
+      if (!slowed.has(a)) { a.playbackRate *= RATE; slowed.add(a) }
+      if (paused && a.playState === 'running') { a.pause(); heldByUs.add(a) }
+    }
+    if (!paused) { for (const a of heldByUs) if (a.playState === 'paused') a.play(); heldByUs.clear() }
+  }
+  let real = false; const stop = e => { if (e.isTrusted) real = true }
+  addEventListener('pointermove', stop, true); addEventListener('wheel', stop, true); addEventListener('touchstart', stop, true)
+  const chain = n => { const a = []; for (; n; n = n.parentElement) a.push(n); return a }
+  let y = 0, dir = 1, last2 = null, prev = 0, syncAt = 0
+  function ghost(t, dt) {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (max > 20) { y += dir * max * dt / 6000; if (y >= max) { y = max; dir = -1 } if (y <= 0) { y = 0; dir = 1 } scrollTo(0, y) }
+    const s = t / 1000, x = innerWidth * (.5 + .3 * Math.sin(s * 1.1)), py = innerHeight * (.5 + .26 * Math.sin(s * 1.7)), o = { bubbles: true, clientX: x, clientY: py }
+    const el = document.elementFromPoint(x, py)
+    if (el !== last2) {
+      const a = chain(last2), b = chain(el)
+      a.filter(n => !b.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerleave', { clientX: x, clientY: py })))
+      if (el) el.dispatchEvent(new PointerEvent('pointerover', o))
+      b.filter(n => !a.includes(n)).forEach(n => n.dispatchEvent(new PointerEvent('pointerenter', { clientX: x, clientY: py })))
+      last2 = el
+    }
+    ;(el || document).dispatchEvent(new PointerEvent('pointermove', o))
+  }
+  let ghostOn = false; setTimeout(() => { ghostOn = true }, 500)
+  function frame() {
+    const t = now(), dt = t - prev; prev = t
+    if (!paused) {
+      const run = queue; queue = []
+      for (const [, cb] of run) { try { cb(t) } catch (e) { setTimeout(() => { throw e }) } }
+      if (ghostOn && !real && document.body) ghost(t, dt)
+    }
+    const r = realNow(); if (r > syncAt) { syncAnimations(); syncAt = r + 150 }
+    realRaf(frame)
+  }
+  realRaf(frame)
+  const setPaused = v => { paused = v; syncAnimations() }
+  let hovered = false
+  addEventListener('message', e => { const c = e.data && e.data.creativeFx
+    if (c === 'play') { hovered = true; setPaused(false) } else if (c === 'pause') { hovered = false; setPaused(true) } })
+  // Thumbnails: show a meaningful still frame (scroll demos part-way down), then wait for hover
+  if (hoverMode) setTimeout(() => {
+    const max = document.documentElement.scrollHeight - innerHeight
+    if (hovered) return
+    if (max > 20 && !real) { y = max * .35; scrollTo(0, y) }
+    setPaused(true)
+  }, 1400)
+})()</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Silk Turbulence Gradient</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { font-family: system-ui, sans-serif; color: #fff; overflow: hidden; }
+  .hero { position: relative; height: 100%; display: grid; place-content: center; text-align: center; gap: 18px; padding: 24px; box-sizing: border-box; isolation: isolate; }
+  .hero h1 { margin: 0; font-size: clamp(34px, 6.5vw, 76px); font-weight: 500; letter-spacing: -.035em; line-height: 1; }
+  .hero p { margin: 0; font-size: clamp(14px, 1.6vw, 19px); opacity: .9; }
+  .cta { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
+  .cta a { padding: 11px 20px; border-radius: 999px; font: 600 14px system-ui; text-decoration: none; color: #7a1e45; background: rgb(255 255 255 / .92); }
+  .cta a + a { color: #fff; background: rgb(255 255 255 / .2); }
+  .controls { position: absolute; left: 50%; bottom: 18px; translate: -50% 0; display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 14px; background: rgb(0 0 0 / .25); backdrop-filter: blur(10px); font-size: 12px; }
+  .controls input[type=color] { width: 26px; height: 26px; padding: 0; border: 2px solid rgb(255 255 255 / .6); border-radius: 50%; background: none; cursor: pointer; }
+  .controls input[type=color]::-webkit-color-swatch-wrapper { padding: 0; } .controls input[type=color]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  .controls button { padding: 5px 10px; border-radius: 999px; border: 1px solid rgb(255 255 255 / .35); background: none; color: #fff; font: 600 11px system-ui; cursor: pointer; }
+
+  /* === EFFECT === */
+  .silk { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <canvas class="silk" data-colors="#ff5c8f,#ff7aa6,#ffa3c4" aria-hidden="true"></canvas>
+    <h1>Let's shape what's next</h1>
+    <p>A calm, flowing backdrop for your boldest call to action.</p>
+    <div class="cta"><a href="#">Start a project</a><a href="#">See our work</a></div>
+    <div class="controls" aria-label="Gradient colors">
+      <input type="color" value="#ff5c8f" aria-label="Color 1"><input type="color" value="#ff7aa6" aria-label="Color 2"><input type="color" value="#ffa3c4" aria-label="Color 3">
+      <button data-preset="#ff5c8f,#ff7aa6,#ffa3c4">Satin</button><button data-preset="#0b3d91,#1d7fd6,#7fd3ff">Ocean</button>
+      <button data-preset="#ff6a3d,#ffb347,#ffd9a0">Sunset</button><button data-preset="#1a1a22,#4a4a58,#9a9aae">Graphite</button>
+    </div>
+  </section>
+<script>
+  // === EFFECT JS ===
+  class SilkGradient {
+    static FS = `precision highp float;
+      uniform vec2 uRes; uniform float uTime, uScale, uAmp, uFreq, uIter, uWaves, uGrain, uCount;
+      uniform vec3 uCol[5];
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      vec3 palette(float v) {                      // smooth blend across 2–5 colors
+        float x = v * (uCount - 1.0); vec3 a = uCol[0], b = uCol[0];
+        for (int k = 0; k < 5; k++) { float fk = float(k);
+          if (fk == floor(x)) a = uCol[k];
+          if (fk == min(floor(x) + 1.0, uCount - 1.0)) b = uCol[k]; }
+        return mix(a, b, smoothstep(0.0, 1.0, fract(x)));
+      }
+      void main() {
+        vec2 p = (gl_FragCoord.xy * 2.0 - uRes) / uRes.y;
+        float sum = 0.0, wsum = 0.0;
+        for (int layer = 0; layer < 3; layer++) {   // three offset layers soften the folds
+          float L = float(layer);
+          vec2 q = p * uScale + vec2(L * 1.7, -L * 0.9);
+          float a = 0.3 + L, b = 1.1 - L * 0.5;
+          for (int j = 1; j < 12; j++) {             // sine turbulence: each pass bends the coordinates again
+            float fj = float(j); if (fj >= uIter) break;
+            q += uAmp * sin(q.yx * uFreq * fj + uTime + vec2(a, b)) / fj;
+            a += cos(fj + b + q.x * 1.5 - uTime * 0.7);
+            b += sin(fj * q.y * 0.5 + a + uTime * 0.5);
+          }
+          float v = 0.5 + 0.5 * sin(length(q + vec2(a, b) * 0.15) * uWaves + L * 2.1);
+          float w = 1.0 - abs(L - 1.0) * 0.4;
+          sum += v * w; wsum += w;
+        }
+        float v = clamp((sum / wsum - 0.25) / 0.5, 0.0, 1.0);
+        v = clamp(v + (hash(gl_FragCoord.xy + fract(uTime)) - 0.5) * uGrain, 0.0, 1.0);   // dither kills banding
+        gl_FragColor = vec4(palette(v), 1.0);
+      }`;
+    constructor(canvas, { colors, speed = .3, scale = .5, turbulence = .45, frequency = .85, iterations = 6, waves = 4, grain = .04, resolution = .5 } = {}) {
+      Object.assign(this, { canvas, speed, scale, turbulence, frequency, iterations, waves, grain, resolution });
+      this.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.setColors(colors || (canvas.dataset.colors || '#ff5c8f,#ff7aa6,#ffa3c4').split(','));
+      const gl = this.gl = canvas.getContext('webgl', { antialias: false });
+      if (!gl) return;                              // CSS gradient fallback set by setColors()
+      const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+      const pr = gl.createProgram();
+      gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }'));
+      gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, SilkGradient.FS)); gl.linkProgram(pr); gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      this.u = Object.fromEntries(['uRes', 'uTime', 'uScale', 'uAmp', 'uFreq', 'uIter', 'uWaves', 'uGrain', 'uCount', 'uCol'].map(k => [k, gl.getUniformLocation(pr, k)]));
+      this.resize = () => { const d = Math.min(devicePixelRatio, 2) * this.resolution, r = canvas.getBoundingClientRect();
+        canvas.width = Math.max(1, r.width * d); canvas.height = Math.max(1, r.height * d); gl.viewport(0, 0, canvas.width, canvas.height); };
+      addEventListener('resize', this.resize); this.resize();
+      this.t0 = performance.now(); this.frame = this.frame.bind(this); requestAnimationFrame(this.frame);
+    }
+    setColors(list) {
+      this.colors = list.map(h => h.trim()).filter(Boolean).slice(0, 5);
+      if (this.colors.length < 2) this.colors.push(this.colors[0] || '#ffffff');
+      this.rgb = new Float32Array(15);
+      this.colors.forEach((h, i) => { const n = parseInt(h.replace('#', ''), 16); this.rgb.set([(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255], i * 3); });
+      this.canvas.style.background = `linear-gradient(135deg, ${this.colors.join(', ')})`;   // fallback / first paint
+      this.canvas.dataset.colors = this.colors.join(',');
+    }
+    frame(now) {
+      const { gl, u, canvas } = this;
+      if (!gl) return;
+      const t = this.reduce ? 4 : (now - this.t0) / 1000 * this.speed;
+      gl.uniform2f(u.uRes, canvas.width, canvas.height); gl.uniform1f(u.uTime, t);
+      gl.uniform1f(u.uScale, this.scale); gl.uniform1f(u.uAmp, this.turbulence); gl.uniform1f(u.uFreq, this.frequency);
+      gl.uniform1f(u.uIter, this.iterations); gl.uniform1f(u.uWaves, this.waves); gl.uniform1f(u.uGrain, this.grain);
+      gl.uniform1f(u.uCount, this.colors.length); gl.uniform3fv(u.uCol, this.rgb);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!this.reduce) requestAnimationFrame(this.frame);
+    }
+  }
+
+  // Demo: live color pickers + presets
+  const silk = new SilkGradient(document.querySelector('.silk'));
+  const pickers = [...document.querySelectorAll('.controls input')];
+  const apply = list => { silk.setColors(list); pickers.forEach((p, i) => p.value = list[i] || list[list.length - 1]); if (silk.reduce) silk.frame(0); };
+  pickers.forEach(p => p.addEventListener('input', () => apply(pickers.map(x => x.value))));
+  document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => apply(b.dataset.preset.split(',')));
+</script>
+</body>
+</html>
